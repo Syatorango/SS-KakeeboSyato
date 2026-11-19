@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スマート家計簿 - 支出＆節約管理</title>
+    <!-- Tailwind CSSの読み込み -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Inter & Noto Sans JP) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome (アイコン用) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* カスタムスタイルとフォント設定 */
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* スクロールバーのカスタマイズ */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* アニメーション */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased pb-16">
+
+    <!-- ヘッダー -->
+    <header class="bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-5xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5">
+                <div class="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
+                    <i class="fa-solid fa-wallet text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-tight">スマート家計簿</h1>
+                    <p class="text-xs text-emerald-100 hidden sm:block">毎日の支出と節約目標をシンプルに管理</p>
+                </div>
+            </div>
+
+            <!-- 対象月の選択とアクションボタン -->
+            <div class="flex items-center gap-2 sm:gap-3">
+                <div class="flex items-center bg-white/15 rounded-xl px-2 py-1 backdrop-blur-sm">
+                    <button id="prevMonthBtn" class="p-1.5 hover:bg-white/20 rounded-lg transition" title="前月">
+                        <i class="fa-solid fa-chevron-left text-sm"></i>
+                    </button>
+                    <input type="month" id="currentMonthInput" class="bg-transparent text-white font-semibold text-sm sm:text-base px-2 focus:outline-none cursor-pointer">
+                    <button id="nextMonthBtn" class="p-1.5 hover:bg-white/20 rounded-lg transition" title="翌月">
+                        <i class="fa-solid fa-chevron-right text-sm"></i>
+                    </button>
+                </div>
+                <button id="exportCsvBtn" class="bg-white text-emerald-700 hover:bg-emerald-50 font-medium text-xs sm:text-sm px-3 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5" title="CSVダウンロード">
+                    <i class="fa-solid fa-file-csv text-base"></i>
+                    <span class="hidden sm:inline">CSV出力</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="max-w-5xl mx-auto px-4 pt-6 space-y-6">
+
+        <!-- 通知メッセージエリア (alert()の代替) -->
+        <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+        <!-- ホーム画面：月間サマリー＆節約目標ダッシュボード -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- カード1：今月の残り金額 ＆ 今日使える目安金額 -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col justify-between relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-full -z-0"></div>
+                <div class="relative z-10">
+                    <div class="flex items-center justify-between text-slate-500 text-sm font-medium mb-1">
+                        <span>今月の残り使える金額</span>
+                        <i class="fa-solid fa-coins text-emerald-500"></i>
+                    </div>
+                    <div id="remainingAmountDisplay" class="text-3xl font-bold text-slate-800 tracking-tight my-1.5">
+                        ¥0
+                    </div>
+                    <!-- 今日使える目安金額（1日あたりの予算） -->
+                    <div class="bg-emerald-50/90 border border-emerald-200/80 rounded-xl px-3 py-2 mt-2 flex items-center justify-between">
+                        <span class="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                            <i class="fa-solid fa-calendar-day text-emerald-600"></i>
+                            <span id="dailyBudgetLabel">1日あたりの目安:</span>
+                        </span>
+                        <span id="dailyBudgetDisplay" class="text-sm sm:text-base font-extrabold text-emerald-700">¥0</span>
+                    </div>
+                </div>
+                <div class="relative z-10 pt-3 mt-3 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500">
+                    <span>使用可能予算: <strong id="usableBudgetDisplay" class="text-slate-700">¥0</strong></span>
+                    <span id="budgetStatusBadge" class="px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700">順調</span>
+                </div>
+            </div>
+
+            <!-- カード2：今月の支出合計 ＆ 先月との比較表示 -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between text-slate-500 text-sm font-medium mb-1">
+                        <span>今月の支出合計</span>
+                        <i class="fa-solid fa-receipt text-rose-500"></i>
+                    </div>
+                    <div id="totalSpentDisplay" class="text-3xl font-bold text-rose-600 tracking-tight my-1.5">
+                        ¥0
+                    </div>
+                    <!-- 先月との比較コメント -->
+                    <div id="monthComparisonBox" class="text-xs px-2.5 py-1.5 rounded-lg bg-slate-50 text-slate-600 border border-slate-100 flex items-center gap-1.5 mt-2">
+                        <i class="fa-solid fa-scale-balanced text-slate-400"></i>
+                        <span id="monthComparisonText">先月と比較中...</span>
+                    </div>
+                </div>
+                <!-- 毎月の基本予算入力 -->
+                <div class="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <label for="monthlyBudgetInput" class="text-xs font-medium text-slate-500 whitespace-nowrap">毎月の予算(円):</label>
+                    <div class="relative flex-1 max-w-[140px]">
+                        <input type="number" id="monthlyBudgetInput" min="0" step="1000" placeholder="100000"
+                            class="w-full text-right text-sm font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- カード3：節約したい金額（目標設定＆進捗） -->
+            <div class="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-5 shadow-sm border border-amber-200/70 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between text-amber-800 text-sm font-bold mb-1">
+                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-piggy-bank text-amber-500"></i> 節約したい金額</span>
+                        <span id="savingsAchieveText" class="text-xs bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full">目標設定中</span>
+                    </div>
+                    <div class="mt-2 flex items-center gap-2">
+                        <span class="text-amber-700 font-bold">¥</span>
+                        <input type="number" id="savingsGoalInput" min="0" step="1000" placeholder="20000"
+                            class="w-full text-xl font-bold text-amber-900 bg-white/80 border border-amber-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <div class="flex justify-between text-xs text-amber-800 mb-1">
+                        <span>予算消費率</span>
+                        <span id="budgetProgressPercent" class="font-semibold">0%</span>
+                    </div>
+                    <div class="w-full bg-amber-200/60 rounded-full h-2 overflow-hidden">
+                        <div id="budgetProgressBar" class="bg-emerald-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 便利機能バー：ワンタップテンプレート ＆ 固定費管理ボタン -->
+        <section class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-100 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <i class="fa-solid fa-bolt text-amber-500"></i>
+                    ワンタップ入力テンプレート
+                </h2>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="openTemplateModalBtn" class="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                        <i class="fa-solid fa-plus"></i> テンプレ追加
+                    </button>
+                    <button type="button" id="openFixedCostModalBtn" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                        <i class="fa-solid fa-rotate"></i> 固定費の自動登録 (<span id="fixedCostCountBadge">0</span>)
+                    </button>
+                </div>
+            </div>
+            <!-- テンプレートボタン一覧 -->
+            <div id="templateButtonsContainer" class="flex flex-wrap gap-2">
+                <!-- JSで動的に描画 -->
+            </div>
+        </section>
+
+        <!-- 入力フォームセクション：いつ・何を・どこで・いくら（オートコンプリート付き） -->
+        <section class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-100">
+            <h2 class="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <span class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-plus"></i>
+                </span>
+                新しい支出を記録する
+            </h2>
+            <form id="expenseForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-4 items-end">
+                <!-- いつ（日付） -->
+                <div class="lg:col-span-2">
+                    <label for="dateInput" class="block text-xs font-semibold text-slate-600 mb-1">いつ (日付) <span class="text-rose-500">*</span></label>
+                    <input type="date" id="dateInput" required
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition">
+                </div>
+
+                <!-- 何を（品名 + オートコンプリート） -->
+                <div class="lg:col-span-3">
+                    <label for="itemInput" class="block text-xs font-semibold text-slate-600 mb-1">何を (購入物) <span class="text-rose-500">*</span></label>
+                    <input type="text" id="itemInput" list="itemHistoryList" placeholder="例：ランチ、牛乳、ノート" required autocomplete="off"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition">
+                    <datalist id="itemHistoryList"></datalist>
+                </div>
+
+                <!-- どこで（店舗・場所 + オートコンプリート） -->
+                <div class="lg:col-span-3">
+                    <label for="placeInput" class="block text-xs font-semibold text-slate-600 mb-1">どこで (お店・場所) <span class="text-rose-500">*</span></label>
+                    <input type="text" id="placeInput" list="placeHistoryList" placeholder="例：スーパー〇〇、Amazon" required autocomplete="off"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition">
+                    <datalist id="placeHistoryList"></datalist>
+                </div>
+
+                <!-- カテゴリー（便利機能） -->
+                <div class="lg:col-span-2">
+                    <label for="categoryInput" class="block text-xs font-semibold text-slate-600 mb-1">カテゴリー</label>
+                    <select id="categoryInput"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition">
+                        <option value="食費">🍔 食費</option>
+                        <option value="日用品">🧻 日用品</option>
+                        <option value="交通費">🚃 交通費</option>
+                        <option value="固定費">🏠 固定費・サブスク</option>
+                        <option value="趣味・娯楽">🎮 趣味・娯楽</option>
+                        <option value="衣服・美容">👕 衣服・美容</option>
+                        <option value="交際費">🍻 交際費</option>
+                        <option value="その他">📦 その他</option>
+                    </select>
+                </div>
+
+                <!-- いくら（金額） -->
+                <div class="lg:col-span-2">
+                    <label for="priceInput" class="block text-xs font-semibold text-slate-600 mb-1">値段 (円) <span class="text-rose-500">*</span></label>
+                    <input type="number" id="priceInput" min="1" placeholder="1200" required
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition">
+                </div>
+
+                <!-- 登録ボタン -->
+                <div class="sm:col-span-2 lg:col-span-12 flex justify-end mt-1">
+                    <button type="submit"
+                        class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-sm transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-check"></i>
+                        家計簿に追加する
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- 便利機能：カテゴリー別支出グラフバー ＆ 検索フィルター -->
+        <section class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
+            <!-- カテゴリー内訳サマリー -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">カテゴリー別支出バランス</h3>
+                    <span id="itemCountBadge" class="text-xs text-slate-500 font-medium">0件の記録</span>
+                </div>
+                <div id="categoryBarContainer" class="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                    <!-- JSで動的にバーを描画 -->
+                </div>
+                <div id="categoryLegend" class="flex flex-wrap gap-3 mt-2.5 text-xs text-slate-600">
+                    <!-- JSで凡例を描画 -->
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
+            <!-- 検索・絞り込みバー -->
+            <div class="flex flex-col sm:flex-row gap-3">
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input type="text" id="searchInput" placeholder="品名やお店の名前で検索..."
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <select id="filterCategorySelect"
+                    class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="ALL">すべてのカテゴリー</option>
+                    <option value="食費">🍔 食費</option>
+                    <option value="日用品">🧻 日用品</option>
+                    <option value="交通費">🚃 交通費</option>
+                    <option value="固定費">🏠 固定費・サブスク</option>
+                    <option value="趣味・娯楽">🎮 趣味・娯楽</option>
+                    <option value="衣服・美容">👕 衣服・美容</option>
+                    <option value="交際費">🍻 交際費</option>
+                    <option value="その他">📦 その他</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- 購入リスト表示セクション（日ごとのグループ化・日別合計・月間残高表示） -->
+        <section class="space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2 px-1">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-list-ul text-emerald-600"></i>
+                        購入履歴リスト（日別まとめ）
+                    </h2>
+                    <label class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-slate-50 transition">
+                        <input type="checkbox" id="selectAllCheckbox" class="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer">
+                        <span>すべて選択</span>
+                    </label>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="bulkDeleteBtn" class="hidden text-xs bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-lg shadow-xs transition items-center gap-1.5">
+                        <i class="fa-solid fa-trash-can"></i>
+                        <span>選択した <span id="selectedCountText">0</span>件を削除</span>
+                    </button>
+                    <button id="loadSampleBtn" class="text-xs text-emerald-600 hover:underline font-medium">
+                        サンプルデータを試す
+                    </button>
+                </div>
+            </div>
+
+            <!-- リスト描画エリア -->
+            <div id="expenseListContainer" class="space-y-4">
+                <!-- JavaScriptで日ごとのカードが生成されます -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 削除確認用カスタムモーダル (confirm()の代替) -->
+    <div id="deleteModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl animate-fade-in">
+            <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-xl mb-4 mx-auto">
+                <i class="fa-solid fa-trash-can"></i>
+            </div>
+            <h3 class="text-lg font-bold text-center text-slate-800 mb-2">記録を削除しますか？</h3>
+            <p id="deleteModalText" class="text-sm text-slate-500 text-center mb-6">この操作は取り消せません。</p>
+            <div class="flex gap-3">
+                <button id="cancelDeleteBtn" class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition">
+                    キャンセル
+                </button>
+                <button id="confirmDeleteBtn" class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-sm transition">
+                    削除する
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- テンプレート追加用モーダル -->
+    <div id="templateModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl animate-fade-in">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-bolt text-amber-500"></i> ワンタップテンプレを追加
+                </h3>
+                <button id="closeTemplateModalBtn" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="templateForm" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">購入物 (例: コーヒー) *</label>
+                    <input type="text" id="tplItemInput" required placeholder="コーヒー" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">お店・場所 (例: セブンイレブン) *</label>
+                    <input type="text" id="tplPlaceInput" required placeholder="セブンイレブン" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">カテゴリー</label>
+                        <select id="tplCategoryInput" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm">
+                            <option value="食費">🍔 食費</option>
+                            <option value="日用品">🧻 日用品</option>
+                            <option value="交通費">🚃 交通費</option>
+                            <option value="固定費">🏠 固定費・サブスク</option>
+                            <option value="趣味・娯楽">🎮 趣味・娯楽</option>
+                            <option value="衣服・美容">👕 衣服・美容</option>
+                            <option value="交際費">🍻 交際費</option>
+                            <option value="その他">📦 その他</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">値段 (円) *</label>
+                        <input type="number" id="tplPriceInput" min="1" required placeholder="150" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm">
+                    </div>
+                </div>
+                <div class="pt-3 flex gap-2">
+                    <button type="button" id="cancelTemplateBtn" class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm">閉じる</button>
+                    <button type="submit" class="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm">テンプレ保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 固定費の自動登録管理モーダル -->
+    <div id="fixedCostModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl animate-fade-in max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-rotate text-indigo-600"></i> 毎月の固定費（自動登録）
+                </h3>
+                <button id="closeFixedCostModalBtn" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-500 mb-4">登録しておくと、対象月を開いたときに指定日の支出として自動で家計簿に追加されます（家賃・スマホ代・サブスクなど）。</p>
+
+            <!-- 新規固定費フォーム -->
+            <form id="fixedCostForm" class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-3 mb-4">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">毎月の引落日 *</label>
+                        <select id="fcDayInput" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-sm">
+                            <!-- 1日〜28日・末日をJSで生成 -->
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">項目名 (例: スマホ代、Netflix) *</label>
+                        <input type="text" id="fcItemInput" required placeholder="スマホ通信費" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-sm">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">支払先・お店 *</label>
+                        <input type="text" id="fcPlaceInput" required placeholder="〇〇モバイル" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">金額 (円) *</label>
+                        <input type="number" id="fcPriceInput" min="1" required placeholder="3280" class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-sm">
+                    </div>
+                </div>
+                <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-lg transition">
+                    <i class="fa-solid fa-plus mr-1"></i> 固定費リストに追加
+                </button>
+            </form>
+
+            <!-- 登録済み固定費リスト -->
+            <div class="flex-1 overflow-y-auto space-y-2 pr-1" id="fixedCostListContainer">
+                <!-- JSで描画 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * スマート家計簿アプリケーション ロジック (JavaScript)
+         * データの永続化にはブラウザの localStorage を使用しています。
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- 状態管理 (State) ---
+            const STORAGE_KEY_EXPENSES = 'smart_kakeibo_expenses_v1';
+            const STORAGE_KEY_SETTINGS = 'smart_kakeibo_settings_v1';
+            const STORAGE_KEY_TEMPLATES = 'smart_kakeibo_templates_v1';
+            const STORAGE_KEY_FIXED_COSTS = 'smart_kakeibo_fixed_costs_v1';
+
+            let expenses = [];
+            let monthlySettings = {};
+            let templates = [];
+            let fixedCosts = [];
+            let deleteTargetId = null;
+            let isBulkDeleteMode = false;
+            let selectedExpenseIds = new Set();
+
+            // デフォルトのワンタップテンプレート
+            const DEFAULT_TEMPLATES = [
+                { id: 'tpl_1', item: 'コーヒー', place: 'コンビニ', category: '食費', price: 150 },
+                { id: 'tpl_2', item: 'ランチ定食', place: '食堂・カフェ', category: '食費', price: 900 },
+                { id: 'tpl_3', item: '電車・バス代', place: '交通IC', category: '交通費', price: 420 }
+            ];
+
+            // カテゴリーごとの色定義
+            const CATEGORY_COLORS = {
+                '食費': { bg: 'bg-orange-400', badge: 'bg-orange-100 text-orange-700', icon: '🍔' },
+                '日用品': { bg: 'bg-sky-400', badge: 'bg-sky-100 text-sky-700', icon: '🧻' },
+                '交通費': { bg: 'bg-indigo-400', badge: 'bg-indigo-100 text-indigo-700', icon: '🚃' },
+                '固定費': { bg: 'bg-teal-500', badge: 'bg-teal-100 text-teal-800', icon: '🏠' },
+                '趣味・娯楽': { bg: 'bg-purple-400', badge: 'bg-purple-100 text-purple-700', icon: '🎮' },
+                '衣服・美容': { bg: 'bg-pink-400', badge: 'bg-pink-100 text-pink-700', icon: '👕' },
+                '交際費': { bg: 'bg-amber-400', badge: 'bg-amber-100 text-amber-700', icon: '🍻' },
+                'その他': { bg: 'bg-slate-400', badge: 'bg-slate-200 text-slate-700', icon: '📦' }
+            };
+
+            // --- DOM要素の取得 ---
+            const currentMonthInput = document.getElementById('currentMonthInput');
+            const prevMonthBtn = document.getElementById('prevMonthBtn');
+            const nextMonthBtn = document.getElementById('nextMonthBtn');
+            const exportCsvBtn = document.getElementById('exportCsvBtn');
+
+            const remainingAmountDisplay = document.getElementById('remainingAmountDisplay');
+            const dailyBudgetLabel = document.getElementById('dailyBudgetLabel');
+            const dailyBudgetDisplay = document.getElementById('dailyBudgetDisplay');
+            const usableBudgetDisplay = document.getElementById('usableBudgetDisplay');
+            const budgetStatusBadge = document.getElementById('budgetStatusBadge');
+            const totalSpentDisplay = document.getElementById('totalSpentDisplay');
+            const monthComparisonBox = document.getElementById('monthComparisonBox');
+            const monthComparisonText = document.getElementById('monthComparisonText');
+            const monthlyBudgetInput = document.getElementById('monthlyBudgetInput');
+            const savingsGoalInput = document.getElementById('savingsGoalInput');
+            const savingsAchieveText = document.getElementById('savingsAchieveText');
+            const budgetProgressPercent = document.getElementById('budgetProgressPercent');
+            const budgetProgressBar = document.getElementById('budgetProgressBar');
+
+            const templateButtonsContainer = document.getElementById('templateButtonsContainer');
+            const openTemplateModalBtn = document.getElementById('openTemplateModalBtn');
+            const templateModal = document.getElementById('templateModal');
+            const closeTemplateModalBtn = document.getElementById('closeTemplateModalBtn');
+            const cancelTemplateBtn = document.getElementById('cancelTemplateBtn');
+            const templateForm = document.getElementById('templateForm');
+
+            const openFixedCostModalBtn = document.getElementById('openFixedCostModalBtn');
+            const fixedCostCountBadge = document.getElementById('fixedCostCountBadge');
+            const fixedCostModal = document.getElementById('fixedCostModal');
+            const closeFixedCostModalBtn = document.getElementById('closeFixedCostModalBtn');
+            const fixedCostForm = document.getElementById('fixedCostForm');
+            const fcDayInput = document.getElementById('fcDayInput');
+            const fixedCostListContainer = document.getElementById('fixedCostListContainer');
+
+            const expenseForm = document.getElementById('expenseForm');
+            const dateInput = document.getElementById('dateInput');
+            const itemInput = document.getElementById('itemInput');
+            const placeInput = document.getElementById('placeInput');
+            const itemHistoryList = document.getElementById('itemHistoryList');
+            const placeHistoryList = document.getElementById('placeHistoryList');
+            const categoryInput = document.getElementById('categoryInput');
+            const priceInput = document.getElementById('priceInput');
+
+            const searchInput = document.getElementById('searchInput');
+            const filterCategorySelect = document.getElementById('filterCategorySelect');
+            const categoryBarContainer = document.getElementById('categoryBarContainer');
+            const categoryLegend = document.getElementById('categoryLegend');
+            const itemCountBadge = document.getElementById('itemCountBadge');
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+            const selectedCountText = document.getElementById('selectedCountText');
+            const expenseListContainer = document.getElementById('expenseListContainer');
+            const loadSampleBtn = document.getElementById('loadSampleBtn');
+
+            const deleteModal = document.getElementById('deleteModal');
+            const deleteModalText = document.getElementById('deleteModalText');
+            const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+            const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+
+            // --- 初期化処理 ---
+            function init() {
+                populateFixedCostDays();
+                loadData();
+
+                // 今日の日付をデフォルトセット
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+
+                currentMonthInput.value = `${yyyy}-${mm}`;
+                dateInput.value = `${yyyy}-${mm}-${dd}`;
+
+                applyFixedCostsForMonth(currentMonthInput.value);
+                syncSettingsInputs();
+                renderTemplates();
+                renderFixedCostList();
+                updateAutocompleteLists();
+                renderAll();
+            }
+
+            // 固定費の日付選択肢を生成 (1日〜28日, 末日)
+            function populateFixedCostDays() {
+                for (let d = 1; d <= 28; d++) {
+                    const opt = document.createElement('option');
+                    opt.value = d;
+                    opt.textContent = `毎月 ${d}日`;
+                    fcDayInput.appendChild(opt);
+                }
+                const lastOpt = document.createElement('option');
+                lastOpt.value = 'LAST';
+                lastOpt.textContent = '毎月 末日';
+                fcDayInput.appendChild(lastOpt);
+            }
+
+            // ローカルストレージからデータ読み込み
+            function loadData() {
+                try {
+                    const savedExpenses = localStorage.getItem(STORAGE_KEY_EXPENSES);
+                    const savedSettings = localStorage.getItem(STORAGE_KEY_SETTINGS);
+                    const savedTemplates = localStorage.getItem(STORAGE_KEY_TEMPLATES);
+                    const savedFixedCosts = localStorage.getItem(STORAGE_KEY_FIXED_COSTS);
+
+                    expenses = savedExpenses ? JSON.parse(savedExpenses) : [];
+                    monthlySettings = savedSettings ? JSON.parse(savedSettings) : {};
+                    templates = savedTemplates ? JSON.parse(savedTemplates) : [...DEFAULT_TEMPLATES];
+                    fixedCosts = savedFixedCosts ? JSON.parse(savedFixedCosts) : [];
+                } catch (e) {
+                    console.error('データの読み込みに失敗しました:', e);
+                    expenses = [];
+                    monthlySettings = {};
+                    templates = [...DEFAULT_TEMPLATES];
+                    fixedCosts = [];
+                }
+            }
+
+            // ローカルストレージへ保存
+            function saveData() {
+                try {
+                    localStorage.setItem(STORAGE_KEY_EXPENSES, JSON.stringify(expenses));
+                    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(monthlySettings));
+                    localStorage.setItem(STORAGE_KEY_TEMPLATES, JSON.stringify(templates));
+                    localStorage.setItem(STORAGE_KEY_FIXED_COSTS, JSON.stringify(fixedCosts));
+                } catch (e) {
+                    showToast('データの保存に失敗しました', 'error');
+                }
+            }
+
+            // 対象月の固定費を自動登録（重複登録防止付き）
+            function applyFixedCostsForMonth(monthStr) {
+                if (fixedCosts.length === 0) return;
+
+                const [year, month] = monthStr.split('-').map(Number);
+                const lastDayOfMonth = new Date(year, month, 0).getDate();
+                let addedCount = 0;
+
+                fixedCosts.forEach(fc => {
+                    const targetDay = fc.day === 'LAST' ? lastDayOfMonth : Math.min(Number(fc.day), lastDayOfMonth);
+                    const dateStr = `${monthStr}-${String(targetDay).padStart(2, '0')}`;
+                    const autoId = `fixed_${fc.id}_${monthStr}`;
+
+                    // すでにこの月の分が登録済みかチェック
+                    const alreadyExists = expenses.some(exp => exp.fixedAutoId === autoId);
+                    if (!alreadyExists) {
+                        expenses.push({
+                            id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            fixedAutoId: autoId,
+                            isFixedCost: true,
+                            date: dateStr,
+                            item: fc.item,
+                            place: fc.place,
+                            category: '固定費',
+                            price: Number(fc.price)
+                        });
+                        addedCount++;
+                    }
+                });
+
+                if (addedCount > 0) {
+                    saveData();
+                    showToast(`${monthStr}の固定費 ${addedCount}件を自動登録しました`);
+                }
+            }
+
+            // 入力履歴からオートコンプリート（datalist）を更新
+            function updateAutocompleteLists() {
+                const itemSet = new Set();
+                const placeSet = new Set();
+
+                // 新しい履歴を優先して最大50件まで候補にする
+                [...expenses].reverse().forEach(exp => {
+                    if (exp.item && itemSet.size < 50) itemSet.add(exp.item);
+                    if (exp.place && placeSet.size < 50) placeSet.add(exp.place);
+                });
+
+                itemHistoryList.innerHTML = Array.from(itemSet)
+                    .map(val => `<option value="${escapeHtml(val)}"></option>`)
+                    .join('');
+
+                placeHistoryList.innerHTML = Array.from(placeSet)
+                    .map(val => `<option value="${escapeHtml(val)}"></option>`)
+                    .join('');
+            }
+
+            // 現在の選択月の設定を取得（未設定ならデフォルト値を返す）
+            function getCurrentMonthSetting() {
+                const monthKey = currentMonthInput.value;
+                if (!monthlySettings[monthKey]) {
+                    // 過去の直近設定があれば引き継ぐ
+                    const keys = Object.keys(monthlySettings).sort();
+                    const lastSetting = keys.length > 0 ? monthlySettings[keys[keys.length - 1]] : null;
+                    monthlySettings[monthKey] = {
+                        budget: lastSetting ? lastSetting.budget : 100000,
+                        savingsGoal: lastSetting ? lastSetting.savingsGoal : 20000
+                    };
+                }
+                return monthlySettings[monthKey];
+            }
+
+            // 設定入力欄に現在の月の値を反映
+            function syncSettingsInputs() {
+                const setting = getCurrentMonthSetting();
+                monthlyBudgetInput.value = setting.budget;
+                savingsGoalInput.value = setting.savingsGoal;
+            }
+
+            // 金額フォーマット関数 (例: 1200 -> ¥1,200)
+            function formatYen(amount) {
+                const sign = amount < 0 ? '-' : '';
+                return `${sign}¥${Math.abs(amount).toLocaleString()}`;
+            }
+
+            // トースト通知表示関数
+            function showToast(message, type = 'success') {
+                const container = document.getElementById('toastContainer');
+                const toast = document.createElement('div');
+                const bgColor = type === 'success' ? 'bg-slate-800' : 'bg-rose-600';
+                const icon = type === 'success' ? '<i class="fa-solid fa-circle-check text-emerald-400"></i>' : '<i class="fa-solid fa-circle-exclamation"></i>';
+
+                toast.className = `${bgColor} text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg flex items-center gap-2.5 animate-fade-in`;
+                toast.innerHTML = `${icon}<span>${message}</span>`;
+                container.appendChild(toast);
+
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    toast.style.transition = 'opacity 0.3s';
+                    setTimeout(() => toast.remove(), 300);
+                }, 2800);
+            }
+
+            // --- メイン描画処理 ---
+            function renderAll() {
+                const selectedMonth = currentMonthInput.value; // "YYYY-MM"
+                const setting = getCurrentMonthSetting();
+                const budget = Number(setting.budget) || 0;
+                const savingsGoal = Number(setting.savingsGoal) || 0;
+
+                // 選択された月の全支出を抽出
+                const monthExpenses = expenses.filter(exp => exp.date.startsWith(selectedMonth));
+
+                // 今月の総支出額を計算
+                const totalSpent = monthExpenses.reduce((sum, exp) => sum + Number(exp.price), 0);
+
+                // 節約目標を差し引いた「実質使える予算」と「今月の残り金額」
+                const usableBudget = Math.max(0, budget - savingsGoal);
+                const remainingAmount = usableBudget - totalSpent;
+
+                // ダッシュボードの数値更新
+                totalSpentDisplay.textContent = formatYen(totalSpent);
+                usableBudgetDisplay.textContent = formatYen(usableBudget);
+                remainingAmountDisplay.textContent = formatYen(remainingAmount);
+
+                // --- 新機能：今日使える目安金額（1日あたりの予算）の計算 ---
+                updateDailyBudgetDisplay(selectedMonth, remainingAmount);
+
+                // --- 新機能：先月との比較表示 ---
+                updateMonthComparison(selectedMonth, totalSpent);
+
+                // 残り金額の色とステータスバッジ更新
+                if (remainingAmount < 0) {
+                    remainingAmountDisplay.className = 'text-3xl font-bold text-rose-600 tracking-tight my-1.5';
+                    budgetStatusBadge.className = 'px-2 py-0.5 rounded-full font-medium bg-rose-100 text-rose-700';
+                    budgetStatusBadge.textContent = '節約目標オーバー';
+                    savingsAchieveText.textContent = 'ピンチ！支出を見直そう';
+                    savingsAchieveText.className = 'text-xs bg-rose-200 text-rose-800 px-2 py-0.5 rounded-full font-bold';
+                } else if (remainingAmount < usableBudget * 0.2) {
+                    remainingAmountDisplay.className = 'text-3xl font-bold text-amber-600 tracking-tight my-1.5';
+                    budgetStatusBadge.className = 'px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700';
+                    budgetStatusBadge.textContent = '残りわずか';
+                    savingsAchieveText.textContent = 'あと少しで目標達成！';
+                    savingsAchieveText.className = 'text-xs bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full';
+                } else {
+                    remainingAmountDisplay.className = 'text-3xl font-bold text-emerald-600 tracking-tight my-1.5';
+                    budgetStatusBadge.className = 'px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700';
+                    budgetStatusBadge.textContent = '順調に節約中';
+                    savingsAchieveText.textContent = `目標 ${formatYen(savingsGoal)} 確保中`;
+                    savingsAchieveText.className = 'text-xs bg-emerald-200/80 text-emerald-900 px-2 py-0.5 rounded-full font-semibold';
+                }
+
+                // プログレスバー更新
+                const percent = usableBudget > 0 ? Math.min(100, Math.round((totalSpent / usableBudget) * 100)) : (totalSpent > 0 ? 100 : 0);
+                budgetProgressPercent.textContent = `${percent}%`;
+                budgetProgressBar.style.width = `${percent}%`;
+                if (percent >= 100) {
+                    budgetProgressBar.className = 'bg-rose-500 h-2 rounded-full transition-all duration-500';
+                } else if (percent >= 80) {
+                    budgetProgressBar.className = 'bg-amber-500 h-2 rounded-full transition-all duration-500';
+                } else {
+                    budgetProgressBar.className = 'bg-emerald-500 h-2 rounded-full transition-all duration-500';
+                }
+
+                // カテゴリー別内訳バーの描画
+                renderCategoryBreakdown(monthExpenses, totalSpent);
+
+                // 購入履歴リストの描画（検索・フィルター適用）
+                renderExpenseList(monthExpenses, remainingAmount, usableBudget, selectedMonth);
+            }
+
+            // 1日あたりの使える目安金額を計算・表示
+            function updateDailyBudgetDisplay(selectedMonth, remainingAmount) {
+                const today = new Date();
+                const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                const [selYear, selMonth] = selectedMonth.split('-').map(Number);
+                const daysInSelectedMonth = new Date(selYear, selMonth, 0).getDate();
+
+                if (remainingAmount <= 0) {
+                    dailyBudgetLabel.textContent = '今日使える目安:';
+                    dailyBudgetDisplay.textContent = '¥0 (予算超過)';
+                    dailyBudgetDisplay.className = 'text-xs sm:text-sm font-bold text-rose-600';
+                    return;
+                }
+
+                if (selectedMonth === currentMonthStr) {
+                    // 当月の場合：今日を含めた残り日数で割る
+                    const remainingDays = Math.max(1, daysInSelectedMonth - today.getDate() + 1);
+                    const perDay = Math.floor(remainingAmount / remainingDays);
+                    dailyBudgetLabel.textContent = `今日使える目安 (残${remainingDays}日):`;
+                    dailyBudgetDisplay.textContent = formatYen(perDay);
+                    dailyBudgetDisplay.className = 'text-sm sm:text-base font-extrabold text-emerald-700';
+                } else if (selectedMonth > currentMonthStr) {
+                    // 未来の月の場合：その月の総日数で割る
+                    const perDay = Math.floor(remainingAmount / daysInSelectedMonth);
+                    dailyBudgetLabel.textContent = `1日あたりの予算 (${daysInSelectedMonth}日間):`;
+                    dailyBudgetDisplay.textContent = formatYen(perDay);
+                    dailyBudgetDisplay.className = 'text-sm sm:text-base font-extrabold text-emerald-700';
+                } else {
+                    // 過去の月の場合
+                    dailyBudgetLabel.textContent = '最終余剰金:';
+                    dailyBudgetDisplay.textContent = `+${formatYen(remainingAmount)}`;
+                    dailyBudgetDisplay.className = 'text-sm sm:text-base font-extrabold text-teal-700';
+                }
+            }
+
+            // 先月との比較表示を更新
+            function updateMonthComparison(selectedMonth, currentTotalSpent) {
+                const [year, month] = selectedMonth.split('-').map(Number);
+                const prevDate = new Date(year, month - 2, 1);
+                const prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
+                const prevMonthExpenses = expenses.filter(exp => exp.date.startsWith(prevMonthStr));
+                if (prevMonthExpenses.length === 0) {
+                    monthComparisonBox.className = 'text-xs px-2.5 py-1.5 rounded-lg bg-slate-50 text-slate-500 border border-slate-100 flex items-center gap-1.5 mt-2';
+                    monthComparisonText.textContent = '先月の記録はまだありません';
+                    return;
+                }
+
+                // 当月を見ている場合は「先月の同じ日までの累計」と比較して公平にする
+                const today = new Date();
+                const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                let prevCompareTotal = 0;
+                let compareLabel = '先月合計';
+
+                if (selectedMonth === currentMonthStr) {
+                    const currentDay = today.getDate();
+                    prevCompareTotal = prevMonthExpenses
+                        .filter(exp => Number(exp.date.slice(8, 10)) <= currentDay)
+                        .reduce((sum, exp) => sum + Number(exp.price), 0);
+                    compareLabel = `先月${currentDay}日時点`;
+                } else {
+                    prevCompareTotal = prevMonthExpenses.reduce((sum, exp) => sum + Number(exp.price), 0);
+                }
+
+                const diff = currentTotalSpent - prevCompareTotal;
+                if (diff < 0) {
+                    monthComparisonBox.className = 'text-xs px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/70 flex items-center gap-1.5 mt-2 font-medium';
+                    monthComparisonText.innerHTML = `<i class="fa-solid fa-arrow-trend-down text-emerald-600"></i> ${compareLabel}より <strong>${formatYen(Math.abs(diff))}</strong> 節約中！`;
+                } else if (diff > 0) {
+                    monthComparisonBox.className = 'text-xs px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-200/70 flex items-center gap-1.5 mt-2 font-medium';
+                    monthComparisonText.innerHTML = `<i class="fa-solid fa-arrow-trend-up text-rose-600"></i> ${compareLabel}より <strong>+${formatYen(diff)}</strong> 多め`;
+                } else {
+                    monthComparisonBox.className = 'text-xs px-2.5 py-1.5 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 flex items-center gap-1.5 mt-2';
+                    monthComparisonText.textContent = `${compareLabel}とまったく同じペースです`;
+                }
+            }
+
+            // ワンタップテンプレートの描画
+            function renderTemplates() {
+                templateButtonsContainer.innerHTML = '';
+                if (templates.length === 0) {
+                    templateButtonsContainer.innerHTML = '<p class="text-xs text-slate-400">よく使う項目を「テンプレ追加」から登録すると、ワンタップで家計簿につけられます。</p>';
+                    return;
+                }
+
+                templates.forEach(tpl => {
+                    const catStyle = CATEGORY_COLORS[tpl.category] || CATEGORY_COLORS['その他'];
+                    const chip = document.createElement('div');
+                    chip.className = 'inline-flex items-center bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-xl overflow-hidden transition shadow-2xs group';
+
+                    chip.innerHTML = `
+                        <button type="button" class="px-3 py-1.5 flex items-center gap-1.5 text-left" title="クリックで即登録">
+                            <span class="text-sm">${catStyle.icon}</span>
+                            <span class="text-xs font-bold text-slate-700 group-hover:text-emerald-800">${escapeHtml(tpl.item)}</span>
+                            <span class="text-[11px] text-slate-400">(${escapeHtml(tpl.place)})</span>
+                            <span class="text-xs font-extrabold text-emerald-600 ml-0.5">${formatYen(Number(tpl.price))}</span>
+                        </button>
+                        <button type="button" class="delete-tpl-btn px-2 py-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 border-l border-slate-200/70 text-xs transition" title="テンプレート削除">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    `;
+
+                    // ワンタップ登録クリック
+                    chip.querySelector('button:first-child').addEventListener('click', () => {
+                        const targetDate = dateInput.value || new Date().toISOString().slice(0, 10);
+                        expenses.push({
+                            id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            date: targetDate,
+                            item: tpl.item,
+                            place: tpl.place,
+                            category: tpl.category,
+                            price: Number(tpl.price)
+                        });
+                        saveData();
+                        updateAutocompleteLists();
+                        renderAll();
+                        showToast(`⚡ ワンタップ登録：「${tpl.item}」(${formatYen(tpl.price)})`);
+                    });
+
+                    // テンプレート削除クリック
+                    chip.querySelector('.delete-tpl-btn').addEventListener('click', () => {
+                        templates = templates.filter(t => t.id !== tpl.id);
+                        saveData();
+                        renderTemplates();
+                        showToast('テンプレートを削除しました');
+                    });
+
+                    templateButtonsContainer.appendChild(chip);
+                });
+            }
+
+            // 固定費リストの描画
+            function renderFixedCostList() {
+                fixedCostCountBadge.textContent = fixedCosts.length;
+                fixedCostListContainer.innerHTML = '';
+
+                if (fixedCosts.length === 0) {
+                    fixedCostListContainer.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">登録されている固定費はありません</p>';
+                    return;
+                }
+
+                fixedCosts.forEach(fc => {
+                    const dayLabel = fc.day === 'LAST' ? '毎月末日' : `毎月${fc.day}日`;
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center justify-between bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200/70';
+                    row.innerHTML = `
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[11px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md">${dayLabel}</span>
+                                <span class="text-sm font-bold text-slate-800">${escapeHtml(fc.item)}</span>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-0.5">${escapeHtml(fc.place)}</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-slate-800 text-sm">${formatYen(Number(fc.price))}</span>
+                            <button type="button" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition" title="固定費設定を削除">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                        </div>
+                    `;
+
+                    row.querySelector('button').addEventListener('click', () => {
+                        fixedCosts = fixedCosts.filter(item => item.id !== fc.id);
+                        saveData();
+                        renderFixedCostList();
+                        showToast('固定費の設定を削除しました（過去の履歴は残ります）');
+                    });
+
+                    fixedCostListContainer.appendChild(row);
+                });
+            }
+
+            // カテゴリー内訳の描画
+            function renderCategoryBreakdown(monthExpenses, totalSpent) {
+                categoryBarContainer.innerHTML = '';
+                categoryLegend.innerHTML = '';
+
+                if (totalSpent === 0) {
+                    categoryBarContainer.innerHTML = '<div class="w-full h-full bg-slate-200"></div>';
+                    categoryLegend.innerHTML = '<span class="text-slate-400">今月の支出データはまだありません</span>';
+                    return;
+                }
+
+                const categoryTotals = {};
+                monthExpenses.forEach(exp => {
+                    categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + Number(exp.price);
+                });
+
+                Object.entries(categoryTotals)
+                    .sort((a, b) => b[1] - a[1])
+                    .forEach(([cat, amount]) => {
+                        const pct = ((amount / totalSpent) * 100).toFixed(1);
+                        const colorInfo = CATEGORY_COLORS[cat] || CATEGORY_COLORS['その他'];
+
+                        // バー要素
+                        const barSegment = document.createElement('div');
+                        barSegment.className = `${colorInfo.bg} h-full transition-all duration-500`;
+                        barSegment.style.width = `${pct}%`;
+                        barSegment.title = `${cat}: ${formatYen(amount)} (${pct}%)`;
+                        categoryBarContainer.appendChild(barSegment);
+
+                        // 凡例要素
+                        const legendItem = document.createElement('div');
+                        legendItem.className = 'flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100';
+                        legendItem.innerHTML = `
+                            <span class="w-2.5 h-2.5 rounded-full ${colorInfo.bg}"></span>
+                            <span class="font-medium">${cat}</span>
+                            <span class="text-slate-500">${formatYen(amount)} (${pct}%)</span>
+                        `;
+                        categoryLegend.appendChild(legendItem);
+                    });
+            }
+
+            // 日別グループ化リストの描画
+            function renderExpenseList(monthExpenses, monthRemainingAmount, usableBudget, selectedMonth) {
+                const keyword = searchInput.value.trim().toLowerCase();
+                const filterCat = filterCategorySelect.value;
+
+                // 検索・カテゴリー絞り込み
+                const filtered = monthExpenses.filter(exp => {
+                    const matchCat = filterCat === 'ALL' || exp.category === filterCat;
+                    const matchKeyword = !keyword ||
+                        exp.item.toLowerCase().includes(keyword) ||
+                        exp.place.toLowerCase().includes(keyword);
+                    return matchCat && matchKeyword;
+                });
+
+                // 存在しないIDを選択セットから掃除
+                const validIds = new Set(filtered.map(e => e.id));
+                selectedExpenseIds.forEach(id => {
+                    if (!validIds.has(id)) selectedExpenseIds.delete(id);
+                });
+                updateBulkDeleteUI(filtered.length);
+
+                itemCountBadge.textContent = `${filtered.length}件の記録`;
+                expenseListContainer.innerHTML = '';
+
+                if (filtered.length === 0) {
+                    expenseListContainer.innerHTML = `
+                        <div class="bg-white rounded-2xl p-10 text-center border border-slate-100 shadow-xs">
+                            <div class="w-14 h-14 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center text-2xl mx-auto mb-3">
+                                <i class="fa-solid fa-basket-shopping"></i>
+                            </div>
+                            <p class="text-slate-600 font-semibold">表示する購入履歴がありません</p>
+                            <p class="text-xs text-slate-400 mt-1">上のフォームから「いつ・何を・どこで」買ったかを記録しましょう！</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // 1日の基本予算（月間使用可能予算 ÷ その月の日数）とその8割ラインを計算
+                const [selYear, selMonth] = selectedMonth.split('-').map(Number);
+                const daysInMonth = new Date(selYear, selMonth, 0).getDate();
+                const baseDailyBudget = usableBudget > 0 ? Math.floor(usableBudget / daysInMonth) : 0;
+                const eightyPercentLimit = Math.floor(baseDailyBudget * 0.8);
+
+                // 日付ごとにグループ化 (降順: 新しい日付が上)
+                const groupedByDate = {};
+                filtered.forEach(exp => {
+                    if (!groupedByDate[exp.date]) {
+                        groupedByDate[exp.date] = [];
+                    }
+                    groupedByDate[exp.date].push(exp);
+                });
+
+                const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a));
+                const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+
+                sortedDates.forEach(dateStr => {
+                    const dayItems = groupedByDate[dateStr];
+                    // その日に使用した合計金額
+                    const dayTotal = dayItems.reduce((sum, item) => sum + Number(item.price), 0);
+
+                    const dateObj = new Date(dateStr + 'T00:00:00');
+                    const dayOfWeek = weekdays[dateObj.getDay()];
+                    const formattedDate = `${dateObj.getMonth() + 1}月${dateObj.getDate()}日 (${dayOfWeek})`;
+
+                    // 1日の予算の8割を超えなかった場合の達成バッジ判定
+                    let dailyBadgeHtml = '';
+                    if (baseDailyBudget > 0 && dayTotal <= eightyPercentLimit) {
+                        dailyBadgeHtml = `
+                            <span class="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300/80 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-2xs" title="1日の予算目安(${formatYen(baseDailyBudget)})の8割(${formatYen(eightyPercentLimit)})以内に収まりました！">
+                                <span>🏅</span> 予算8割以内クリア！
+                            </span>
+                        `;
+                    }
+
+                    // 日別カードの生成
+                    const dayCard = document.createElement('div');
+                    dayCard.className = 'bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in';
+
+                    // カードヘッダー：日付・8割達成バッジ・一日に使用した金額・1か月ごとの残り金額
+                    const headerHtml = `
+                        <div class="bg-slate-50/90 px-4 sm:px-5 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="bg-emerald-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg">
+                                    <i class="fa-regular fa-calendar mr-1"></i>${formattedDate}
+                                </span>
+                                <span class="text-xs text-slate-400">${dayItems.length}点</span>
+                                ${dailyBadgeHtml}
+                            </div>
+                            <div class="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm">
+                                <div class="bg-rose-50 text-rose-700 px-2.5 py-1 rounded-lg font-semibold border border-rose-100">
+                                    1日の使用額: <span class="text-base font-bold">${formatYen(dayTotal)}</span>
+                                </div>
+                                <div class="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-lg font-medium border border-emerald-100">
+                                    今月の残り: <span class="font-bold ${monthRemainingAmount < 0 ? 'text-rose-600' : 'text-emerald-700'}">${formatYen(monthRemainingAmount)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    // 各購入アイテムの行を生成（一括削除用チェックボックス付き）
+                    const itemsHtml = dayItems.map(item => {
+                        const catStyle = CATEGORY_COLORS[item.category] || CATEGORY_COLORS['その他'];
+                        const fixedBadge = item.isFixedCost ? '<span class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold shrink-0">自動固定費</span>' : '';
+                        const isChecked = selectedExpenseIds.has(item.id);
+                        return `
+                            <div class="px-4 sm:px-5 py-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition border-b border-slate-50 last:border-b-0 ${isChecked ? 'bg-rose-50/40' : ''}">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <input type="checkbox" data-id="${item.id}" ${isChecked ? 'checked' : ''}
+                                        class="expense-item-checkbox w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500 cursor-pointer shrink-0">
+                                    <div class="w-10 h-10 rounded-xl ${catStyle.badge} flex items-center justify-center text-lg shrink-0">
+                                        ${catStyle.icon}
+                                    </div>
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <p class="font-bold text-slate-800 text-sm sm:text-base truncate">${escapeHtml(item.item)}</p>
+                                            <span class="text-[11px] px-2 py-0.5 rounded-md ${catStyle.badge} font-medium shrink-0">${item.category}</span>
+                                            ${fixedBadge}
+                                        </div>
+                                        <p class="text-xs text-slate-500 mt-0.5 flex items-center gap-1 truncate">
+                                            <i class="fa-solid fa-store text-slate-400"></i>
+                                            <span>${escapeHtml(item.place)}</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-3 shrink-0">
+                                    <span class="font-bold text-slate-800 text-base sm:text-lg">${formatYen(Number(item.price))}</span>
+                                    <button onclick="openDeleteModal('${item.id}', '${escapeHtml(item.item)}')"
+                                        class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" title="削除">
+                                        <i class="fa-solid fa-trash-can text-sm"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    dayCard.innerHTML = headerHtml + `<div>${itemsHtml}</div>`;
+                    expenseListContainer.appendChild(dayCard);
+                });
+
+                // 個別チェックボックスのイベント登録
+                document.querySelectorAll('.expense-item-checkbox').forEach(cb => {
+                    cb.addEventListener('change', (e) => {
+                        const id = e.target.dataset.id;
+                        if (e.target.checked) {
+                            selectedExpenseIds.add(id);
+                        } else {
+                            selectedExpenseIds.delete(id);
+                        }
+                        updateBulkDeleteUI(filtered.length);
+                        // 背景色だけ即時反映
+                        const row = e.target.closest('div.flex.items-center.justify-between');
+                        if (row) {
+                            row.classList.toggle('bg-rose-50/40', e.target.checked);
+                        }
+                    });
+                });
+            }
+
+            // 一括削除ボタンと「すべて選択」チェックボックスのUI更新
+            function updateBulkDeleteUI(totalVisibleCount) {
+                const count = selectedExpenseIds.size;
+                selectedCountText.textContent = count;
+
+                if (count > 0) {
+                    bulkDeleteBtn.classList.remove('hidden');
+                    bulkDeleteBtn.classList.add('inline-flex');
+                } else {
+                    bulkDeleteBtn.classList.add('hidden');
+                    bulkDeleteBtn.classList.remove('inline-flex');
+                }
+
+                if (totalVisibleCount > 0 && count === totalVisibleCount) {
+                    selectAllCheckbox.checked = true;
+                    selectAllCheckbox.indeterminate = false;
+                } else if (count > 0) {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = true;
+                } else {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                }
+            }
+
+            // XSS対策用エスケープ関数
+            function escapeHtml(str) {
+                return String(str)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            // --- イベントリスナー ---
+
+            // 支出の追加登録
+            expenseForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+
+                const dateVal = dateInput.value;
+                const itemVal = itemInput.value.trim();
+                const placeVal = placeInput.value.trim();
+                const categoryVal = categoryInput.value;
+                const priceVal = Number(priceInput.value);
+
+                if (!dateVal || !itemVal || !placeVal || priceVal <= 0) {
+                    showToast('すべての項目を正しく入力してください', 'error');
+                    return;
+                }
+
+                const newExpense = {
+                    id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                    date: dateVal,
+                    item: itemVal,
+                    place: placeVal,
+                    category: categoryVal,
+                    price: priceVal
+                };
+
+                expenses.push(newExpense);
+                saveData();
+                updateAutocompleteLists();
+
+                // 登録した日付の月に表示を合わせる
+                const addedMonth = dateVal.slice(0, 7);
+                if (currentMonthInput.value !== addedMonth) {
+                    currentMonthInput.value = addedMonth;
+                    applyFixedCostsForMonth(addedMonth);
+                    syncSettingsInputs();
+                }
+
+                // フォームの一部をリセット（日付とカテゴリーは連続入力しやすいよう維持）
+                itemInput.value = '';
+                placeInput.value = '';
+                priceInput.value = '';
+                itemInput.focus();
+
+                renderAll();
+                showToast(`「${itemVal}」(${formatYen(priceVal)}) を記録しました！`);
+            });
+
+            // テンプレートモーダル操作
+            openTemplateModalBtn.addEventListener('click', () => {
+                templateModal.classList.remove('hidden');
+                templateModal.classList.add('flex');
+            });
+            function closeTemplateModal() {
+                templateModal.classList.add('hidden');
+                templateModal.classList.remove('flex');
+            }
+            closeTemplateModalBtn.addEventListener('click', closeTemplateModal);
+            cancelTemplateBtn.addEventListener('click', closeTemplateModal);
+
+            templateForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const item = document.getElementById('tplItemInput').value.trim();
+                const place = document.getElementById('tplPlaceInput').value.trim();
+                const category = document.getElementById('tplCategoryInput').value;
+                const price = Number(document.getElementById('tplPriceInput').value);
+
+                if (!item || !place || price <= 0) return;
+
+                templates.push({
+                    id: 'tpl_' + Date.now(),
+                    item,
+                    place,
+                    category,
+                    price
+                });
+                saveData();
+                renderTemplates();
+                templateForm.reset();
+                closeTemplateModal();
+                showToast(`テンプレート「${item}」を追加しました！`);
+            });
+
+            // 固定費モーダル操作
+            openFixedCostModalBtn.addEventListener('click', () => {
+                fixedCostModal.classList.remove('hidden');
+                fixedCostModal.classList.add('flex');
+            });
+            closeFixedCostModalBtn.addEventListener('click', () => {
+                fixedCostModal.classList.add('hidden');
+                fixedCostModal.classList.remove('flex');
+            });
+
+            fixedCostForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const day = fcDayInput.value;
+                const item = document.getElementById('fcItemInput').value.trim();
+                const place = document.getElementById('fcPlaceInput').value.trim();
+                const price = Number(document.getElementById('fcPriceInput').value);
+
+                if (!item || !place || price <= 0) return;
+
+                fixedCosts.push({
+                    id: 'fc_' + Date.now(),
+                    day,
+                    item,
+                    place,
+                    price
+                });
+                saveData();
+                renderFixedCostList();
+                // 現在表示中の月に即座に反映
+                applyFixedCostsForMonth(currentMonthInput.value);
+                updateAutocompleteLists();
+                renderAll();
+                fixedCostForm.reset();
+                showToast(`固定費「${item}」を登録しました！`);
+            });
+
+            // 毎月の予算変更
+            monthlyBudgetInput.addEventListener('input', () => {
+                const monthKey = currentMonthInput.value;
+                getCurrentMonthSetting();
+                monthlySettings[monthKey].budget = Math.max(0, Number(monthlyBudgetInput.value) || 0);
+                saveData();
+                renderAll();
+            });
+
+            // 節約したい金額の変更
+            savingsGoalInput.addEventListener('input', () => {
+                const monthKey = currentMonthInput.value;
+                getCurrentMonthSetting();
+                monthlySettings[monthKey].savingsGoal = Math.max(0, Number(savingsGoalInput.value) || 0);
+                saveData();
+                renderAll();
+            });
+
+            // 月の変更
+            currentMonthInput.addEventListener('change', () => {
+                applyFixedCostsForMonth(currentMonthInput.value);
+                syncSettingsInputs();
+                renderAll();
+            });
+
+            // 前月・翌月ボタン
+            function shiftMonth(delta) {
+                const [year, month] = currentMonthInput.value.split('-').map(Number);
+                const newDate = new Date(year, month - 1 + delta, 1);
+                const yyyy = newDate.getFullYear();
+                const mm = String(newDate.getMonth() + 1).padStart(2, '0');
+                currentMonthInput.value = `${yyyy}-${mm}`;
+                applyFixedCostsForMonth(currentMonthInput.value);
+                syncSettingsInputs();
+                renderAll();
+            }
+
+            prevMonthBtn.addEventListener('click', () => shiftMonth(-1));
+            nextMonthBtn.addEventListener('click', () => shiftMonth(1));
+
+            // 検索・絞り込み
+            searchInput.addEventListener('input', renderAll);
+            filterCategorySelect.addEventListener('change', renderAll);
+
+            // 「すべて選択」チェックボックス操作
+            selectAllCheckbox.addEventListener('change', (e) => {
+                const checkboxes = document.querySelectorAll('.expense-item-checkbox');
+                if (e.target.checked) {
+                    checkboxes.forEach(cb => selectedExpenseIds.add(cb.dataset.id));
+                } else {
+                    checkboxes.forEach(cb => selectedExpenseIds.delete(cb.dataset.id));
+                }
+                renderAll();
+            });
+
+            // 一括削除ボタンクリック
+            bulkDeleteBtn.addEventListener('click', () => {
+                const count = selectedExpenseIds.size;
+                if (count === 0) return;
+                isBulkDeleteMode = true;
+                deleteTargetId = null;
+                deleteModalText.textContent = `選択した ${count}件 の購入記録をまとめて削除してもよろしいですか？`;
+                deleteModal.classList.remove('hidden');
+                deleteModal.classList.add('flex');
+            });
+
+            // 削除モーダル関連
+            window.openDeleteModal = function(id, itemName) {
+                isBulkDeleteMode = false;
+                deleteTargetId = id;
+                deleteModalText.textContent = `「${itemName}」の記録を削除してもよろしいですか？`;
+                deleteModal.classList.remove('hidden');
+                deleteModal.classList.add('flex');
+            };
+
+            function closeDeleteModal() {
+                deleteTargetId = null;
+                isBulkDeleteMode = false;
+                deleteModal.classList.add('hidden');
+                deleteModal.classList.remove('flex');
+            }
+
+            cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+            confirmDeleteBtn.addEventListener('click', () => {
+                if (isBulkDeleteMode && selectedExpenseIds.size > 0) {
+                    const deletedCount = selectedExpenseIds.size;
+                    expenses = expenses.filter(exp => !selectedExpenseIds.has(exp.id));
+                    selectedExpenseIds.clear();
+                    saveData();
+                    renderAll();
+                    showToast(`${deletedCount}件の記録を一括削除しました`);
+                } else if (deleteTargetId) {
+                    expenses = expenses.filter(exp => exp.id !== deleteTargetId);
+                    selectedExpenseIds.delete(deleteTargetId);
+                    saveData();
+                    renderAll();
+                    showToast('記録を削除しました');
+                }
+                closeDeleteModal();
+            });
+
+            // CSVエクスポート機能
+            exportCsvBtn.addEventListener('click', () => {
+                const selectedMonth = currentMonthInput.value;
+                const monthExpenses = expenses
+                    .filter(exp => exp.date.startsWith(selectedMonth))
+                    .sort((a, b) => a.date.localeCompare(b.date));
+
+                if (monthExpenses.length === 0) {
+                    showToast('出力するデータがありません', 'error');
+                    return;
+                }
+
+                // BOM付きUTF-8でExcelでも文字化けしないようにする
+                let csvContent = '\uFEFF日付,購入物,お店・場所,カテゴリー,値段(円)\n';
+                monthExpenses.forEach(exp => {
+                    const row = [
+                        exp.date,
+                        `"${exp.item.replace(/"/g, '""')}"`,
+                        `"${exp.place.replace(/"/g, '""')}"`,
+                        exp.category,
+                        exp.price
+                    ].join(',');
+                    csvContent += row + '\n';
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `家計簿_${selectedMonth}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                showToast(`${selectedMonth}のCSVをダウンロードしました`);
+            });
+
+            // サンプルデータ投入機能
+            loadSampleBtn.addEventListener('click', () => {
+                const selectedMonth = currentMonthInput.value;
+                const samples = [
+                    { date: `${selectedMonth}-01`, item: '特売の食材まとめ買い', place: 'イオンモール', category: '食費', price: 3480 },
+                    { date: `${selectedMonth}-01`, item: 'カフェラテ', place: 'スターバックス', category: '食費', price: 495 },
+                    { date: `${selectedMonth}-03`, item: 'シャンプー・洗剤', place: 'マツモトキヨシ', category: '日用品', price: 1650 },
+                    { date: `${selectedMonth}-05`, item: 'ICカードチャージ', place: '駅券売機', category: '交通費', price: 3000 },
+                    { date: `${selectedMonth}-05`, item: 'ビジネス書', place: 'Amazon', category: '趣味・娯楽', price: 1760 }
+                ];
+
+                samples.forEach((s, idx) => {
+                    expenses.push({
+                        id: 'sample_' + Date.now() + '_' + idx,
+                        ...s
+                    });
+                });
+
+                saveData();
+                updateAutocompleteLists();
+                renderAll();
+                showToast('サンプルデータを追加しました！');
+            });
+
+            // アプリ起動
+            init();
+        });
+    </script>
+</body>
+</html>
